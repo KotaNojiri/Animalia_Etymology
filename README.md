@@ -41,7 +41,8 @@ python scripts/04_Author_Nationality_Labeling.ipynb
 R scripts/05_Statistical_Analysis.R
 
 ## Citation
-If you use this code, please cite the associated publication.
+If you use this code, please cite this repository.
+Citation information is provided in the "Citation.cff" file.
 
 ## License
 MIT License
