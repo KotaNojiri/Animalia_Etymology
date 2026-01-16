@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: Unravelling historical, taxonomic, and cultural influences on the etymology of scientific names across Animalia
+title: "Scripts for analysin etymological patterns of scientific names in Animalia"
 message: "If you use this code, please cite it as below"
 authors:
  - family-names: Nojiri
