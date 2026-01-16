@@ -179,3 +179,16 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# generated outputs
+outputs/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
