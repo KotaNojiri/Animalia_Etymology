@@ -42,7 +42,7 @@ R scripts/05_Statistical_Analysis.R
 
 ## Citation
 If you use this code, please cite this repository.
-Citation information is provided in the "Citation.cff" file.
+Citation information is provided in the "citation.cff" file.
 
 ## License
 MIT License
