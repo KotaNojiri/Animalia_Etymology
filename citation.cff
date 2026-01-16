@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: Unravelling historical, taxonomic, and cultural influences on the etymology of scientific names across Animalia
+message: "If you use this code, please cite it as below"
+authors:
+ - family-names: Nojiri
+   given-names: Kota
+   orcid: https://orcid.org/0009-0003-4481-0064
+ - family-names: Inoshita
+   given-names: Keito
+license: MIT
