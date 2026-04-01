@@ -71,6 +71,100 @@ country_to_class <- country_class %>%
 data <- data %>%
   dplyr::left_join(country_to_class, by = "Country")
 
+#### validation ####
+# Time period classication based on Burgin et al., 2025
+animalia <- animalia %>%
+  # create Period column
+  dplyr::mutate(Period = dplyr::case_when(
+    Year >= 1758 & Year <= 1880 ~ "1758-1880",
+    Year >= 1881 & Year <= 1939 ~ "1881-1939",
+    Year >= 1940 & Year <= 1999 ~ "1940-1999",
+    Year >= 2000 ~ "2000-Present",
+    TRUE ~ NA_character_)) %>%
+  filter(!is.na(Period)) %>%
+  mutate(Period = factor(Period,
+                         levels = c("1758-1880", 
+                                    "1881-1939",
+                                    "1940-1999", 
+                                    "2000-Present")))
+
+# define categoris and period levels used in validation
+val_categories <- c("Abstract_Morphology",
+                    "Specific_Morphology",
+                    "Conceptual_Morphology",
+                    "Geography",
+                    "People",
+                    "Other")
+period_levels <- c("1758-1880",
+                   "1881-1939",
+                   "1940-1999",
+                   "2000-Present")
+
+# set random seed for reproducibility
+seed_val <- 42
+
+# convert dataset to long format and keep labeled entries
+val_long <- animalia %>%
+  dplyr::select(Species,
+                Genus,
+                Year,
+                Period,
+                Author,
+                Phylum,
+                Country,
+                Author_Class,
+                dplyr::all_of(val_categories)) %>%
+  tidyr::pivot_longer(cols = dplyr::all_of(val_categories),
+                      names_to = "Category",
+                      values_to = "Flag") %>%
+  dplyr::filter(Flag == 1) %>%
+  dplyr::mutate(Period = factor(Period,
+                                levels = period_levels),
+                Category = factor(Category,
+                                  levels = val_categories)) %>%
+  dplyr::filter(!is.na(Period),
+                !is.na(Category))
+
+# count available samples per Period × Category
+val_counts <- val_long %>%
+  dplyr::count(Period,
+               Category,
+               name = "n_available")
+print(val_counts)
+
+# identify cells with fewer than 10 available samples
+val_counts_short <- val_counts %>%
+  dplyr::filter(n_available < 10)
+print(val_counts_short)
+
+# randomize order within each Period × Category
+set.seed(seed_val)
+
+val_que <- val_long %>%
+  dplyr::group_by(Period, Category) %>%
+  dplyr::mutate(rand = sample.int(dplyr::n())) %>%
+  dplyr::arrange(rand, .by_group = TRUE) %>%
+  dplyr::mutate(random_order = dplyr::row_number()) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-rand)
+
+# select top N samples per group for validation
+val_topN <- val_que %>%
+  dplyr::group_by(Period, Category) %>%
+  # take first N samples per group (or fewer if not available)
+  dplyr::slice_head(n = "put any number here" ) %>%
+  dplyr::ungroup()
+
+# prepare validation sheet with annotation columns
+val_topN_sheet <- val_topN %>%
+  dplyr::mutate(manual_evaluate = NA_character_,
+                manual_label = NA_character_,
+                agreement = NA_character_,
+                notes = NA_character_)
+
+# export results
+readr::write_csv(val_topN_sheet, "animalia_validation.csv")
+
 #### Common Functions ####
 ## Temporal Count
 temp_count <- function(df, label = "All"){
