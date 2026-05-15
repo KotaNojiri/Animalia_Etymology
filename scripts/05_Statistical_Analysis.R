@@ -4,6 +4,7 @@ library(arrow) # read parquet
 library(dplyr) # manipulate data
 library(tidyr) # transform to long format
 library(tibble) # manipulate names of rows and columns
+library(readr) # write csv
 
 library(mgcv) # do GAM
 library(ggplot2) # create ggplots
@@ -15,11 +16,12 @@ data <- arrow::read_parquet(".parquet")
 
 # integrate Male and Female
 data <- data %>%
-  dplyr::mutate(People = pmin(People_Male + People_Female, 1)) 
+  dplyr::mutate(Morphology = pmin(Abstract_Morphology +
+                                  Specific_Morphology +
+                                  Conceptual_Morphology, 1)) %>%
+  dplyr::mutate(People = pmin(People_Male + People_Female, 1))
 
-num_cols <- c("Abstract_Morphology", "Specific_Morphology", 
-              "Conceptual_Morphology", "Geography", 
-              "People", "Other")
+num_cols <- c("Morphology", "Geography", "People", "Other")
 
 # divide into each phylum (exclude duplication of Phylum)
 phylum <- unique(data$"Phylum") 
@@ -103,6 +105,7 @@ period_levels <- c("1758-1880",
 # set random seed for reproducibility
 seed_val <- 42
 
+## epithets
 # convert dataset to long format and keep labeled entries
 val_long <- animalia %>%
   dplyr::select(Species,
@@ -124,18 +127,6 @@ val_long <- animalia %>%
                                   levels = val_categories)) %>%
   dplyr::filter(!is.na(Period),
                 !is.na(Category))
-
-# count available samples per Period × Category
-val_counts <- val_long %>%
-  dplyr::count(Period,
-               Category,
-               name = "n_available")
-print(val_counts)
-
-# identify cells with fewer than 10 available samples
-val_counts_short <- val_counts %>%
-  dplyr::filter(n_available < 10)
-print(val_counts_short)
 
 # randomize order within each Period × Category
 set.seed(seed_val)
@@ -159,11 +150,60 @@ val_topN <- val_que %>%
 val_topN_sheet <- val_topN %>%
   dplyr::mutate(manual_evaluate = NA_character_,
                 manual_label = NA_character_,
-                agreement = NA_character_,
-                notes = NA_character_)
+                agreement = NA_character_)
 
 # export results
 readr::write_csv(val_topN_sheet, "animalia_validation.csv")
+
+## nationality
+region_levels <- c("European Names",
+                   "East Asian Names",
+                   "South Asian Names",
+                   "African Names",
+                   "Latin American Names",
+                   "Middle Eastern Names")
+
+nat_long <- animalia %>%
+  dplyr::filter(!is.na(Period),
+                !is.na(Author_Class)) %>%
+  dplyr::mutate(Period = factor(Period, levels = period_levels),
+                Author_Class = factor(Author_Class, levels = region_levels)) %>%
+  dplyr::filter(!is.na(Period),
+                !is.na(Author_Class)) %>%
+  dplyr::select(Year, Period, Author, Author_Class)
+
+set.seed(seed_val)
+
+nat_que <- nat_long %>%
+  dplyr::group_by(Period, Author_Class) %>%
+  dplyr::mutate(rand = sample.int(dplyr::n())) %>%
+  dplyr::arrange(rand, .by_group = TRUE) %>%
+  dplyr::ungroup() %>%
+  
+  dplyr::distinct(Author, .keep_all = TRUE) %>%
+  dplyr::group_by(Period, Author_Class) %>%
+  dplyr::mutate(random_order = dplyr::row_number()) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-rand)
+
+nat_topN <- nat_que %>%
+  dplyr::group_by(Period, Author_Class) %>%
+  dplyr::slice_head(n = "put any number") %>%
+  dplyr::ungroup()
+
+nat_topN_sheet <- nat_topN %>%
+  dplyr::mutate(manual_evaluate = NA_character_)
+
+readr::write_excel_csv(nat_topN_sheet, "nationality_validation.csv")
+
+## GAMs
+gam_diag_all <- list(All = list(k = mgcv::gam.check(prop_all$model),
+                                concurvity = mgcv::concurvity(prop_all$model, full = TRUE)))
+
+gam_diag_phylum <- lapply(prop_phylum, function(x){
+  if(is.null(x$model)) return(NULL)
+  list(k = mgcv::gam.check(x$model),
+       concurvity = mgcv::concurvity(x$model, full = TRUE))})
 
 #### Common Functions ####
 ## Temporal Count
@@ -172,9 +212,7 @@ temp_count <- function(df, label = "All"){
   temporal_sum <- df %>%
     dplyr::group_by(Year) %>%
     dplyr::summarise(
-      Abstract_Morphology = sum(Abstract_Morphology, na.rm = TRUE),
-      Specific_Morphology = sum(Specific_Morphology, na.rm = TRUE),
-      Conceptual_Morphology = sum(Conceptual_Morphology, na.rm = TRUE),
+      Morphology = sum(Morphology, na.rm = TRUE),
       People = sum(People, na.rm = TRUE),
       Geography = sum(Geography, na.rm = TRUE),
       Other = sum(Other, na.rm = TRUE),
@@ -187,9 +225,7 @@ temp_count <- function(df, label = "All"){
       Year = as.integer(Year),
       Count = as.numeric(Count),
       Category = factor(Category, 
-                        levels = c("Abstract_Morphology",
-                                   "Specific_Morphology",
-                                   "Conceptual_Morphology",
+                        levels = c("Morphology",
                                    "Geography",
                                    "People",
                                    "Other")))
@@ -231,9 +267,7 @@ temp_count <- function(df, label = "All"){
       Year = as.numeric(Year),
       Category = factor(
         Category,
-        levels = c("Abstract_Morphology", 
-                   "Specific_Morphology",
-                   "Conceptual_Morphology",
+        levels = c("Morphology",
                    "Geography",
                    "People", 
                    "Other"))) %>%
@@ -288,26 +322,20 @@ temp_count <- function(df, label = "All"){
        error = NULL)}
 
 # define colors, line-types, and shapes
-.category_colors <- c("Abstract_Morphology" = "black",
-                      "Specific_Morphology" = "#A52A00",
-                      "Conceptual_Morphology" = "darkgreen",
+.category_colors <- c("Abstract_Morphology" = "#A52A00",
                       "Geography" = "darkblue",
                       "People" = "#4B0082",
                       "Other" = "darkcyan")
 
-.category_line <- c("Abstract_Morphology" = "solid",
-                    "Specific_Morphology" = "dashed",
-                    "Conceptual_Morphology" = "dotdash",
-                    "Geography" = "dotted",
-                    "People" = "longdash",
-                    "Other" = "twodash")
+.category_line <- c("Morphology" = "solid",
+                    "Geography" = "dashed",
+                    "People" = "dotdash",
+                    "Other" = "dotted")
 
-.category_shape <- c("Abstract_Morphology" = 16,
-                     "Specific_Morphology" = 17,
-                     "Conceptual_Morphology" = 3,
-                     "Geography" = 15,
-                     "People" = 4,
-                     "Other" = 8)
+.category_shape <- c("Morphology" = 16,
+                     "Geography" = 17,
+                     "People" = 3,
+                     "Other" = 15)
 
 ## GAM
 gam <- function(df, num_cols, label = "All"){
